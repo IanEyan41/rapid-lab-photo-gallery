@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import {
   IonContent,
+  ScrollDetail,
   IonHeader,
   IonPage,
   IonTitle,
@@ -24,6 +25,17 @@ const Tab2: React.FC = () => {
   const { photos, takePhoto, deletePhoto } = usePhotoGallery();
   const [photoToDelete, setPhotoToDelete] = useState<UserPhoto>();
   const [showToast, setShowToast] = useState(false);
+  function handleScrollStart() {
+    console.log("scroll start");
+  }
+
+  function handleScroll(event: CustomEvent<ScrollDetail>) {
+    console.log("scroll", JSON.stringify(event.detail));
+  }
+
+  function handleScrollEnd() {
+    console.log("scroll end");
+  }
 
   return (
     <IonPage>
@@ -32,25 +44,33 @@ const Tab2: React.FC = () => {
           <IonTitle>Photo Gallery</IonTitle>
         </IonToolbar>
       </IonHeader>
-      <IonContent fullscreen>
+      <IonContent
+        fullscreen
+        scrollEvents={true}
+        onIonScrollStart={handleScrollStart}
+        onIonScroll={handleScroll}
+        onIonScrollEnd={handleScrollEnd}
+        class="ion-padding"
+      >
         <IonHeader collapse="condense">
           <IonToolbar>
             <IonTitle size="large">Tab 2</IonTitle>
           </IonToolbar>
         </IonHeader>
+        <IonGrid>
+          <IonRow>
+            {photos.map((photo, index) => (
+              <IonCol size="6" key={photo.filepath}>
+                <IonImg
+                  className="rounded-photo"
+                  onClick={() => setPhotoToDelete(photo)}
+                  src={photo.webviewPath}
+                />
+              </IonCol>
+            ))}
+          </IonRow>
+        </IonGrid>
         <IonFab vertical="bottom" horizontal="center" slot="fixed">
-          <IonGrid>
-            <IonRow>
-              {photos.map((photo, index) => (
-                <IonCol size="6" key={photo.filepath}>
-                  <IonImg
-                    onClick={() => setPhotoToDelete(photo)}
-                    src={photo.webviewPath}
-                  />
-                </IonCol>
-              ))}
-            </IonRow>
-          </IonGrid>
           <IonFabButton
             onClick={async () => {
               await takePhoto();
@@ -60,7 +80,7 @@ const Tab2: React.FC = () => {
             <IonIcon icon={camera}></IonIcon>
           </IonFabButton>
         </IonFab>
-        <ExploreContainer name="Tab 2 page" />
+        {/* <ExploreContainer name="Tab 2 page" /> */}
         <IonActionSheet
           isOpen={!!photoToDelete}
           buttons={[
