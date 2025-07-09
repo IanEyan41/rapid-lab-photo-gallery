@@ -13,6 +13,7 @@ import {
   IonCol,
   IonImg,
   IonActionSheet,
+  IonToast,
 } from "@ionic/react";
 import { camera, trash, close } from "ionicons/icons";
 import ExploreContainer from "../components/ExploreContainer";
@@ -22,6 +23,7 @@ import "./Tab2.css";
 const Tab2: React.FC = () => {
   const { photos, takePhoto, deletePhoto } = usePhotoGallery();
   const [photoToDelete, setPhotoToDelete] = useState<UserPhoto>();
+  const [showToast, setShowToast] = useState(false);
 
   return (
     <IonPage>
@@ -49,7 +51,12 @@ const Tab2: React.FC = () => {
               ))}
             </IonRow>
           </IonGrid>
-          <IonFabButton onClick={() => takePhoto()}>
+          <IonFabButton
+            onClick={async () => {
+              await takePhoto();
+              setShowToast(true);
+            }}
+          >
             <IonIcon icon={camera}></IonIcon>
           </IonFabButton>
         </IonFab>
@@ -75,6 +82,13 @@ const Tab2: React.FC = () => {
             },
           ]}
           onDidDismiss={() => setPhotoToDelete(undefined)}
+        />
+        <IonToast
+          isOpen={showToast}
+          onDidDismiss={() => setShowToast(false)}
+          message="Photo taken successfully!"
+          duration={1500}
+          position="top"
         />
       </IonContent>
     </IonPage>
