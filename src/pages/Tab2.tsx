@@ -48,10 +48,29 @@ const Tab2: React.FC = () => {
   // Function to request location permission explicitly
   const requestLocationPermission = async () => {
     try {
-      if (Capacitor.isPluginAvailable("Geolocation")) {
+      console.log(
+        "Checking Capacitor plugins:",
+        Capacitor.getPlatform(),
+        Capacitor.isNativePlatform()
+      );
+
+      // Check if we're on a native platform
+      if (!Capacitor.isNativePlatform()) {
+        setLocationMessage(
+          "You need to run this app on a real device for location to work."
+        );
+        return;
+      }
+
+      // Always try to use Geolocation regardless of isPluginAvailable
+      // which sometimes returns false even when it's available
+      try {
         console.log("Requesting location permission explicitly...");
-        const permissionStatus = await Geolocation.requestPermissions();
-        const result = permissionStatus.location;
+        const permissionStatus = await Geolocation.checkPermissions();
+        console.log("Current permission status:", permissionStatus.location);
+
+        const requestResult = await Geolocation.requestPermissions();
+        const result = requestResult.location;
         console.log("Location permission response:", result);
 
         if (result === "granted") {
@@ -61,21 +80,40 @@ const Tab2: React.FC = () => {
           );
 
           // Try to get the current position to make sure it works
-          const position = await Geolocation.getCurrentPosition();
-          console.log("Current position:", position);
+          try {
+            const position = await Geolocation.getCurrentPosition({
+              enableHighAccuracy: true,
+              timeout: 15000,
+            });
+            console.log("Current position:", position);
+            setLocationMessage(
+              `Location works! Current coordinates: ${position.coords.latitude.toFixed(
+                4
+              )}, ${position.coords.longitude.toFixed(4)}`
+            );
+          } catch (posError) {
+            console.error("Error getting position:", posError);
+            setLocationMessage(
+              "Permission granted, but failed to get current position. Make sure location services are enabled."
+            );
+          }
         } else {
           setLocationEnabled(false);
           setLocationMessage(
             "Location permission denied. Photos will not have location data."
           );
         }
-      } else {
-        console.log("Geolocation not available");
-        setLocationMessage("Geolocation is not available on this device.");
+      } catch (error) {
+        console.error("Error with Geolocation plugin:", error);
+        setLocationMessage(
+          "Error using Geolocation. Please check app permissions in device settings."
+        );
       }
     } catch (error) {
       console.error("Error requesting location permission:", error);
-      setLocationMessage("Error requesting location permission. Try again.");
+      setLocationMessage(
+        "Error requesting location permission. Try again or check settings."
+      );
     }
   };
 

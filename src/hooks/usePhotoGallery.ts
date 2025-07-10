@@ -99,37 +99,44 @@ export function usePhotoGallery() {
     try {
       console.log("Getting current position...");
 
-      // Check if geolocation is available
-      if (!Capacitor.isPluginAvailable("Geolocation")) {
-        console.error("Geolocation is not available");
-        return null;
+      // Check if we're on a native platform
+      if (!Capacitor.isNativePlatform()) {
+        console.log("Not on native platform - location might not work");
       }
 
       // Request permissions first
-      const permissionStatus = await Geolocation.checkPermissions();
-      console.log("Geolocation permission status:", permissionStatus.location);
+      try {
+        const permissionStatus = await Geolocation.checkPermissions();
+        console.log(
+          "Geolocation permission status:",
+          permissionStatus.location
+        );
 
-      if (permissionStatus.location !== "granted") {
-        const requestResult = await Geolocation.requestPermissions();
-        console.log("Requested permission result:", requestResult.location);
-        if (requestResult.location !== "granted") {
-          console.error("Location permission not granted");
-          return null;
+        if (permissionStatus.location !== "granted") {
+          const requestResult = await Geolocation.requestPermissions();
+          console.log("Requested permission result:", requestResult.location);
+          if (requestResult.location !== "granted") {
+            console.error("Location permission not granted");
+            return null;
+          }
         }
+
+        // Get current position with high accuracy
+        const position = await Geolocation.getCurrentPosition({
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0,
+        });
+
+        console.log("Got position:", position.coords);
+        return {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+      } catch (e) {
+        console.error("Error with Geolocation:", e);
+        return null;
       }
-
-      // Get current position with high accuracy
-      const position = await Geolocation.getCurrentPosition({
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
-      });
-
-      console.log("Got position:", position.coords);
-      return {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      };
     } catch (error) {
       console.error("Error getting location:", error);
       return null;
