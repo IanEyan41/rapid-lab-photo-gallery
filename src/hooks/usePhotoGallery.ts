@@ -11,9 +11,34 @@ import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Preferences } from "@capacitor/preferences";
 import { Capacitor } from "@capacitor/core";
 
+// Handle Geolocation dynamically to avoid build errors if package isn't available
+let Geolocation: any = null;
+const initGeolocation = async () => {
+  try {
+    // Dynamic import to handle missing package gracefully
+    if (window) {
+      // Only try to use Geolocation if it's available in Capacitor
+      if (Capacitor.isPluginAvailable("Geolocation")) {
+        const GeolocationPlugin = await import("@capacitor/geolocation");
+        Geolocation = GeolocationPlugin.Geolocation;
+      }
+    }
+  } catch (error) {
+    console.error("Geolocation not available", error);
+  }
+};
+
+// Initialize geolocation
+initGeolocation();
+
 export interface UserPhoto {
   filepath: string;
   webviewPath?: string;
+  location?: {
+    latitude: number;
+    longitude: number;
+    timestamp: number;
+  };
 }
 
 const PHOTO_STORAGE = "photos";
@@ -21,7 +46,8 @@ const PHOTO_STORAGE = "photos";
 export function usePhotoGallery() {
   const savePicture = async (
     photo: Photo,
-    fileName: string
+    fileName: string,
+    locationData?: { latitude: number; longitude: number } | null
   ): Promise<UserPhoto> => {
     let base64Data: string | Blob;
     // "hybrid" will detect Cordova or Capacitor;
@@ -45,6 +71,13 @@ export function usePhotoGallery() {
       return {
         filepath: savedFile.uri,
         webviewPath: Capacitor.convertFileSrc(savedFile.uri),
+        location: locationData
+          ? {
+              latitude: locationData.latitude,
+              longitude: locationData.longitude,
+              timestamp: Date.now(),
+            }
+          : undefined,
       };
     } else {
       // Use webPath to display the new image instead of base64 since it's
@@ -52,6 +85,13 @@ export function usePhotoGallery() {
       return {
         filepath: fileName,
         webviewPath: photo.webPath,
+        location: locationData
+          ? {
+              latitude: locationData.latitude,
+              longitude: locationData.longitude,
+              timestamp: Date.now(),
+            }
+          : undefined,
       };
     }
   };
@@ -78,21 +118,39 @@ export function usePhotoGallery() {
     };
     loadSaved();
   }, []);
+
+  const getCurrentPosition = async () => {
+    if (!Geolocation) {
+      await initGeolocation();
+      if (!Geolocation) return null;
+    }
+
+    try {
+      const position = await Geolocation.getCurrentPosition();
+      return {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      };
+    } catch (error) {
+      console.error("Error getting location", error);
+      return null;
+    }
+  };
+
   const takePhoto = async () => {
     const photo = await Camera.getPhoto({
       resultType: CameraResultType.Uri,
       source: CameraSource.Camera,
       quality: 100,
     });
+
+    // Try to get location when taking a photo
+    const locationData = await getCurrentPosition();
+
     const fileName = Date.now() + ".jpeg";
-    const savedFileImage = await savePicture(photo, fileName);
-    const newPhotos = [
-      {
-        filepath: fileName,
-        webviewPath: photo.webPath,
-      },
-      ...photos,
-    ];
+    const savedFileImage = await savePicture(photo, fileName, locationData);
+
+    const newPhotos = [savedFileImage, ...photos];
     setPhotos(newPhotos);
     Preferences.set({ key: PHOTO_STORAGE, value: JSON.stringify(newPhotos) });
   };
