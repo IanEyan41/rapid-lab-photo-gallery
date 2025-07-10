@@ -15,9 +15,14 @@ import {
   IonImg,
   IonActionSheet,
   IonToast,
+  IonCard,
+  IonCardContent,
+  IonButton,
+  IonText,
 } from "@ionic/react";
-import { camera, trash, close } from "ionicons/icons";
-import ExploreContainer from "../components/ExploreContainer";
+import { camera, trash, close, location } from "ionicons/icons";
+import { Capacitor } from "@capacitor/core";
+import { Geolocation } from "@capacitor/geolocation";
 import { usePhotoGallery, UserPhoto } from "../hooks/usePhotoGallery";
 import "./Tab2.css";
 
@@ -25,6 +30,9 @@ const Tab2: React.FC = () => {
   const { photos, takePhoto, deletePhoto } = usePhotoGallery();
   const [photoToDelete, setPhotoToDelete] = useState<UserPhoto>();
   const [showToast, setShowToast] = useState(false);
+  const [locationEnabled, setLocationEnabled] = useState(false);
+  const [locationMessage, setLocationMessage] = useState("");
+
   function handleScrollStart() {
     console.log("scroll start");
   }
@@ -36,6 +44,40 @@ const Tab2: React.FC = () => {
   function handleScrollEnd() {
     console.log("scroll end");
   }
+
+  // Function to request location permission explicitly
+  const requestLocationPermission = async () => {
+    try {
+      if (Capacitor.isPluginAvailable("Geolocation")) {
+        console.log("Requesting location permission explicitly...");
+        const permissionStatus = await Geolocation.requestPermissions();
+        const result = permissionStatus.location;
+        console.log("Location permission response:", result);
+
+        if (result === "granted") {
+          setLocationEnabled(true);
+          setLocationMessage(
+            "Location permission granted! Your photos will include location data."
+          );
+
+          // Try to get the current position to make sure it works
+          const position = await Geolocation.getCurrentPosition();
+          console.log("Current position:", position);
+        } else {
+          setLocationEnabled(false);
+          setLocationMessage(
+            "Location permission denied. Photos will not have location data."
+          );
+        }
+      } else {
+        console.log("Geolocation not available");
+        setLocationMessage("Geolocation is not available on this device.");
+      }
+    } catch (error) {
+      console.error("Error requesting location permission:", error);
+      setLocationMessage("Error requesting location permission. Try again.");
+    }
+  };
 
   return (
     <IonPage>
@@ -54,9 +96,35 @@ const Tab2: React.FC = () => {
       >
         <IonHeader collapse="condense">
           <IonToolbar>
-            <IonTitle size="large">Tab 2</IonTitle>
+            <IonTitle size="large">Photos</IonTitle>
           </IonToolbar>
         </IonHeader>
+
+        {/* Location Permission Card */}
+        <IonCard className="location-card">
+          <IonCardContent>
+            <h2>
+              <IonIcon icon={location} /> Location for Photos
+            </h2>
+            <p>
+              Enable location to add location data to your photos. This will
+              allow them to appear on the map.
+            </p>
+            <IonButton
+              expand="block"
+              color={locationEnabled ? "success" : "primary"}
+              onClick={requestLocationPermission}
+            >
+              {locationEnabled ? "Location Enabled" : "Enable Location"}
+            </IonButton>
+            {locationMessage && (
+              <IonText color={locationEnabled ? "success" : "danger"}>
+                <p className="location-message">{locationMessage}</p>
+              </IonText>
+            )}
+          </IonCardContent>
+        </IonCard>
+
         <IonGrid>
           <IonRow>
             {photos.map((photo, index) => (

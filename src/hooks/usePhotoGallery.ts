@@ -11,25 +11,8 @@ import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Preferences } from "@capacitor/preferences";
 import { Capacitor } from "@capacitor/core";
 
-// Handle Geolocation dynamically to avoid build errors if package isn't available
-let Geolocation: any = null;
-const initGeolocation = async () => {
-  try {
-    // Dynamic import to handle missing package gracefully
-    if (window) {
-      // Only try to use Geolocation if it's available in Capacitor
-      if (Capacitor.isPluginAvailable("Geolocation")) {
-        const GeolocationPlugin = await import("@capacitor/geolocation");
-        Geolocation = GeolocationPlugin.Geolocation;
-      }
-    }
-  } catch (error) {
-    console.error("Geolocation not available", error);
-  }
-};
-
-// Initialize geolocation
-initGeolocation();
+// Direct import for Geolocation to ensure it's properly loaded
+import { Geolocation } from "@capacitor/geolocation";
 
 export interface UserPhoto {
   filepath: string;
@@ -65,36 +48,24 @@ export function usePhotoGallery() {
       directory: Directory.Data,
     });
 
-    if (isPlatform("hybrid")) {
-      // Display the new image by rewriting the 'file://' path to HTTP
-      // Details: https://ionicframework.com/docs/building/webview#file-protocol
-      return {
-        filepath: savedFile.uri,
-        webviewPath: Capacitor.convertFileSrc(savedFile.uri),
-        location: locationData
-          ? {
-              latitude: locationData.latitude,
-              longitude: locationData.longitude,
-              timestamp: Date.now(),
-            }
-          : undefined,
-      };
-    } else {
-      // Use webPath to display the new image instead of base64 since it's
-      // already loaded into memory
-      return {
-        filepath: fileName,
-        webviewPath: photo.webPath,
-        location: locationData
-          ? {
-              latitude: locationData.latitude,
-              longitude: locationData.longitude,
-              timestamp: Date.now(),
-            }
-          : undefined,
-      };
-    }
+    const savedPhoto = {
+      filepath: isPlatform("hybrid") ? savedFile.uri : fileName,
+      webviewPath: isPlatform("hybrid")
+        ? Capacitor.convertFileSrc(savedFile.uri)
+        : photo.webPath,
+      location: locationData
+        ? {
+            latitude: locationData.latitude,
+            longitude: locationData.longitude,
+            timestamp: Date.now(),
+          }
+        : undefined,
+    };
+
+    console.log("Saved photo with location:", savedPhoto.location);
+    return savedPhoto;
   };
+
   const [photos, setPhotos] = useState<UserPhoto[]>([]);
   useEffect(() => {
     const loadSaved = async () => {
@@ -114,45 +85,91 @@ export function usePhotoGallery() {
           photo.webviewPath = `data:image/jpeg;base64,${file.data}`;
         }
       }
+      console.log("Loaded photos:", photosInPreferences);
+      console.log(
+        "Photos with location:",
+        photosInPreferences.filter((p) => p.location)
+      );
       setPhotos(photosInPreferences);
     };
     loadSaved();
   }, []);
 
   const getCurrentPosition = async () => {
-    if (!Geolocation) {
-      await initGeolocation();
-      if (!Geolocation) return null;
-    }
-
     try {
-      const position = await Geolocation.getCurrentPosition();
+      console.log("Getting current position...");
+
+      // Check if geolocation is available
+      if (!Capacitor.isPluginAvailable("Geolocation")) {
+        console.error("Geolocation is not available");
+        return null;
+      }
+
+      // Request permissions first
+      const permissionStatus = await Geolocation.checkPermissions();
+      console.log("Geolocation permission status:", permissionStatus.location);
+
+      if (permissionStatus.location !== "granted") {
+        const requestResult = await Geolocation.requestPermissions();
+        console.log("Requested permission result:", requestResult.location);
+        if (requestResult.location !== "granted") {
+          console.error("Location permission not granted");
+          return null;
+        }
+      }
+
+      // Get current position with high accuracy
+      const position = await Geolocation.getCurrentPosition({
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      });
+
+      console.log("Got position:", position.coords);
       return {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
       };
     } catch (error) {
-      console.error("Error getting location", error);
+      console.error("Error getting location:", error);
       return null;
     }
   };
 
   const takePhoto = async () => {
-    const photo = await Camera.getPhoto({
-      resultType: CameraResultType.Uri,
-      source: CameraSource.Camera,
-      quality: 100,
-    });
+    try {
+      // Request location permission first, before taking photo
+      if (Capacitor.isPluginAvailable("Geolocation")) {
+        console.log("Requesting location permission...");
+        const permissionStatus = await Geolocation.requestPermissions();
+        console.log("Location permission response:", permissionStatus.location);
+      }
 
-    // Try to get location when taking a photo
-    const locationData = await getCurrentPosition();
+      const photo = await Camera.getPhoto({
+        resultType: CameraResultType.Uri,
+        source: CameraSource.Camera,
+        quality: 100,
+      });
 
-    const fileName = Date.now() + ".jpeg";
-    const savedFileImage = await savePicture(photo, fileName, locationData);
+      console.log("Photo taken successfully");
 
-    const newPhotos = [savedFileImage, ...photos];
-    setPhotos(newPhotos);
-    Preferences.set({ key: PHOTO_STORAGE, value: JSON.stringify(newPhotos) });
+      // Try to get location when taking a photo
+      const locationData = await getCurrentPosition();
+      console.log("Location data for photo:", locationData);
+
+      const fileName = Date.now() + ".jpeg";
+      const savedFileImage = await savePicture(photo, fileName, locationData);
+
+      const newPhotos = [savedFileImage, ...photos];
+      setPhotos(newPhotos);
+      await Preferences.set({
+        key: PHOTO_STORAGE,
+        value: JSON.stringify(newPhotos),
+      });
+      console.log("Photo saved with location");
+    } catch (error) {
+      console.error("Error taking photo:", error);
+    }
   };
 
   const deletePhoto = async (photo: UserPhoto) => {
